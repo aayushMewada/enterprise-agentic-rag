@@ -3,6 +3,9 @@
   "private": true,
   "description": "Convenience wrapper for Python dependency setup in this repo",
   "scripts": {
-    "postinstall": "node scripts/setup-python-env.js"
+    "postinstall": "node scripts/setup-python-env.js",
+    "ingest": "node scripts/run-python.js main.py --ingest",
+    "query": "node scripts/run-python.js main.py --query",
+    "delete-index": "node scripts/run-python.js -c \"from retrieval.vector_store import delete_index; delete_index()\""
   }
 }

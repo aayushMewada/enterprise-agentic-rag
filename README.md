@@ -1,102 +1,101 @@
-Native RAG Pipeline
+# Native RAG Pipeline
 
-A fully local, end-to-end Retrieval-Augmented Generation (RAG) pipeline — no paid APIs, no cloud dependencies. Ask questions about your own documents and get accurate, grounded answers powered by a local LLM running entirely on your machine.
+A fully local, end-to-end Retrieval-Augmented Generation (RAG) pipeline — no paid APIs, no cloud dependencies. Ask questions about your own documents and get grounded answers from a local LLM.
 
-Project Structure
+Works on **Windows**, **macOS**, and **Linux**.
 
+## Quick start
+
+Full step-by-step instructions (setup, Docker OpenSearch, ingest, query, troubleshooting):
+
+**→ [HOW_TO_RUN.md](HOW_TO_RUN.md)**
+
+Short version:
+
+1. Copy `.env.example` → `.env`
+2. `npm install` (creates `venv/` and installs deps) **or** create `venv` and `pip install -r requirements.txt`
+3. `ollama pull llama3.2`
+4. Start OpenSearch with Docker (`DISABLE_SECURITY_PLUGIN=true`) — see [HOW_TO_RUN.md](HOW_TO_RUN.md)
+5. Put PDFs/txt in `data/raw/`
+6. `npm run ingest` then `npm run query -- "Your question"`
+
+## Project structure
+
+```
 rag-pipeline/
 │
 ├── config/
-│   ├── __init__.py
-│   └── settings.py              ← all constants (chunk size, model names, paths)
+│   └── settings.py              ← chunk size, model names, paths
 │
 ├── data/
-│   ├── raw/                     ← drop your PDFs and txts here manually
-│   ├── processed/               ← auto-written: cleaned text per document
-│   └── chunks/                  ← auto-written: chunked JSON per document
+│   ├── raw/                     ← drop PDFs and txt files here
+│   ├── processed/               ← cleaned text (generated)
+│   └── chunks/                  ← chunked JSON (generated)
 │
 ├── ingestion/
-│   ├── __init__.py
-│   ├── document_loader.py       ← PDF and txt parsing and cleaning
-│   ├── chunker.py               ← recursive text splitting into chunks
-│   ├── embedder.py              ← sentence-transformers embedding model
-│   └── ingest_pipeline.py       ← orchestrates load → chunk → embed → store
+│   ├── document_loader.py       ← PDF / txt loading
+│   ├── chunker.py               ← text splitting
+│   ├── embedder.py              ← sentence-transformers embeddings
+│   └── ingest_pipeline.py       ← load → chunk → embed → store
 │
 ├── retrieval/
-│   ├── __init__.py
-│   ├── vector_store.py          ← OpenSearch index creation and KNN search
-│   ├── retriever.py             ← query embedding and vector search
+│   ├── vector_store.py          ← OpenSearch index + KNN search
+│   ├── retriever.py             ← query embedding + search
 │   └── reranker.py              ← cross-encoder reranking
 │
 ├── generation/
-│   ├── __init__.py
-│   ├── prompt_builder.py        ← assembles system prompt + context + question
-│   └── llm_client.py            ← Ollama API call and response handling
+│   ├── prompt_builder.py        ← prompt assembly
+│   └── llm_client.py            ← Ollama API
 │
-├── main.py                      ← CLI entry point (--ingest and --query)
-├── .env                         ← environment variables (never committed)
-├── .env.example                 ← safe template to share
-├── .gitignore
+├── scripts/
+│   ├── setup-python-env.js      ← creates venv + installs deps
+│   └── run-python.js            ← runs Python inside venv
+│
+├── main.py                      ← CLI: --ingest / --query
+├── HOW_TO_RUN.md                ← detailed run instructions
+├── .env.example                 ← env template (copy to .env)
 ├── requirements.txt
-└── README.md
-
-Every Session - Run in This Order
-
-Open three separate terminals:
-
-Initial setup
-
-Option 1 — npm wrapper
-
-```bash
-npm install
+└── package.json                 ← npm helpers for setup / ingest / query
 ```
 
-This creates `venv/` and installs Python dependencies from `requirements.txt`.
-It now supports Windows and macOS/Linux, as long as Python 3 is installed and available in PATH.
+## Prerequisites
 
-Option 2 — direct Python setup
+| Tool | Purpose |
+|------|---------|
+| Python 3.10+ | Pipeline runtime |
+| Node.js (optional) | `npm install` / `npm run ingest` convenience scripts |
+| Docker Desktop | OpenSearch (HTTP on port 9200, security disabled) |
+| Ollama | Local LLM for answers (`llama3.2` by default) |
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+## npm scripts
 
-Windows direct setup:
+| Command | What it does |
+|---------|----------------|
+| `npm install` | Creates `venv/` and installs Python deps |
+| `npm run ingest` | Load → chunk → embed → store into OpenSearch |
+| `npm run query -- "..."` | Retrieve + rerank + answer via Ollama |
+| `npm run delete-index` | Delete the `rag_index` OpenSearch index |
 
-```bat
-py -3 -m venv venv
-venv\Scripts\activate
-venv\Scripts\pip install -r requirements.txt
-```
+Always use the project `venv` (or these npm scripts). System Python will fail with missing packages.
 
-Terminal 1 - Start OpenSearch
+## Stack
 
-bashdocker start native-rag-pipeline
+| Layer | Default |
+|-------|---------|
+| Embeddings | `all-MiniLM-L6-v2` (local) |
+| Vector store | OpenSearch 2.x KNN |
+| Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| LLM | Ollama `llama3.2` |
 
-Terminal 2 - Start Ollama
+Config lives in `config/settings.py`. Hosts/ports for OpenSearch and Ollama can be overridden in `.env`.
 
-bashollama serve
+## Important notes
 
-Terminal 3 - Your project
+- OpenSearch must be reachable at **http://localhost:9200** (plain HTTP). A ZIP/native install with TLS/security on will not work with the default client.
+- Do not start a second OpenSearch on port 9200 (e.g. `C:\opensearch-…`) while the Docker container is running.
+- First ingest/query downloads embedding and reranker models (hundreds of MB). That is expected once.
+- Wipe the index before re-ingesting if documents changed (`npm run delete-index`).
 
-bashcd rag-pipeline
-source venv/bin/activate    # Mac/Linux
-
-Managing Documents
-
-TaskCommandAdd a new PDFDrop into data/raw/ then run --ingest
-Remove a documentDelete file from data/raw/ then run command below
-Wipe and rebuild indexRun command below then --ingest
-Change chunk settings Wipe index then --ingest
-
-Wipe the OpenSearch index:
-
-bash python -c "from retrieval.vector_store import delete_index; delete_index()"
-
-Always wipe the index before re-ingesting to avoid duplicate or stale chunks.
-
-Author
+## Author
 
 Atharva — GitHub
