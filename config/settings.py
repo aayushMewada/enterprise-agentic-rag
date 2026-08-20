@@ -4,12 +4,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# LLM
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-LLM_MODEL = "llama3.1:8b"
+# Groq LLM
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
 LLM_TEMPERATURE = 0.0
-LLM_NUM_CTX = int(os.getenv("LLM_NUM_CTX", 8192))
-LLM_NUM_GPU = os.getenv("LLM_NUM_GPU")
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", 1500))
 
 # Embeddings
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"

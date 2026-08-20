@@ -1,6 +1,6 @@
 # Native RAG Pipeline
 
-A fully local, end-to-end Retrieval-Augmented Generation (RAG) pipeline — no paid APIs, no cloud dependencies. Ask questions about your own documents and get grounded answers from a local LLM.
+A Retrieval-Augmented Generation (RAG) pipeline for job interview experiences. It uses local embeddings/OpenSearch for retrieval and Groq for hosted LLM answers.
 
 Works on **Windows**, **macOS**, and **Linux**.
 
@@ -14,10 +14,10 @@ Short version:
 
 1. Copy `.env.example` → `.env`
 2. `npm install` (creates `venv/` and installs deps) **or** create `venv` and `pip install -r requirements.txt`
-3. `ollama pull llama3.2`
+3. Add `GROQ_API_KEY` to `.env`
 4. Start OpenSearch with Docker (`DISABLE_SECURITY_PLUGIN=true`) — see [HOW_TO_RUN.md](HOW_TO_RUN.md)
 5. Put PDFs/txt in `data/raw/`
-6. `npm run ingest` then `npm run query -- "Your question"`
+6. `npm run ingest`, then `npm run api` for the GUI or `npm run query -- "Your question"`
 
 ## Project structure
 
@@ -45,7 +45,7 @@ rag-pipeline/
 │
 ├── generation/
 │   ├── prompt_builder.py        ← prompt assembly
-│   └── llm_client.py            ← Ollama API
+│   └── llm_client.py            ← Groq API
 │
 ├── scripts/
 │   ├── setup-python-env.js      ← creates venv + installs deps
@@ -65,7 +65,7 @@ rag-pipeline/
 | Python 3.10+ | Pipeline runtime |
 | Node.js (optional) | `npm install` / `npm run ingest` convenience scripts |
 | Docker Desktop | OpenSearch (HTTP on port 9200, security disabled) |
-| Ollama | Local LLM for answers (`llama3.2` by default) |
+| Groq API key | Hosted LLM for answers |
 
 ## npm scripts
 
@@ -73,7 +73,8 @@ rag-pipeline/
 |---------|----------------|
 | `npm install` | Creates `venv/` and installs Python deps |
 | `npm run ingest` | Load → chunk → embed → store into OpenSearch |
-| `npm run query -- "..."` | Retrieve + rerank + answer via Ollama |
+| `npm run api` | Start the local browser GUI/API |
+| `npm run query -- "..."` | Retrieve + rerank + answer via Groq |
 | `npm run delete-index` | Delete the `rag_index` OpenSearch index |
 
 Always use the project `venv` (or these npm scripts). System Python will fail with missing packages.
@@ -85,14 +86,15 @@ Always use the project `venv` (or these npm scripts). System Python will fail wi
 | Embeddings | `all-MiniLM-L6-v2` (local) |
 | Vector store | OpenSearch 2.x KNN |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| LLM | Ollama `llama3.2` |
+| LLM | Groq `openai/gpt-oss-120b` |
 
-Config lives in `config/settings.py`. Hosts/ports for OpenSearch and Ollama can be overridden in `.env`.
+Config lives in `config/settings.py`. Groq model and OpenSearch host/port can be overridden in `.env`.
 
 ## Important notes
 
 - OpenSearch must be reachable at **http://localhost:9200** (plain HTTP). A ZIP/native install with TLS/security on will not work with the default client.
 - Do not start a second OpenSearch on port 9200 (e.g. `C:\opensearch-…`) while the Docker container is running.
+- `GROQ_API_KEY` must be set in `.env` before asking LLM-backed questions.
 - First ingest/query downloads embedding and reranker models (hundreds of MB). That is expected once.
 - Wipe the index before re-ingesting if documents changed (`npm run delete-index`).
 

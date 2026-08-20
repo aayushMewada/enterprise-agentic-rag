@@ -11,7 +11,7 @@ Install these first:
 | **Python 3.10+** | Windows: enable **Add Python to PATH** during install |
 | **Node.js** (optional) | Needed only if you want `npm` scripts |
 | **Docker Desktop** | Must be running before you start OpenSearch |
-| **Ollama** | Needed for `--query` answers |
+| **Groq API key** | Needed for LLM answers |
 
 ## One-time setup
 
@@ -36,7 +36,9 @@ cp .env.example .env
 Defaults:
 
 ```
-OLLAMA_BASE_URL=http://localhost:11434
+GROQ_API_KEY=your_groq_api_key_here
+LLM_MODEL=openai/gpt-oss-120b
+LLM_MAX_TOKENS=1500
 OPENSEARCH_HOST=localhost
 OPENSEARCH_PORT=9200
 ```
@@ -67,13 +69,15 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Pull the LLM model (once)
+### 4. Add your Groq API key
 
-```bash
-ollama pull llama3.2
+Create a free Groq API key at https://console.groq.com/keys, then put it in `.env`:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+LLM_MODEL=openai/gpt-oss-120b
+LLM_MAX_TOKENS=1500
 ```
-
-The default model name is set in `config/settings.py` (`LLM_MODEL = "llama3.2"`).
 
 ---
 
@@ -121,19 +125,7 @@ You should see JSON with `"cluster_name" : "docker-cluster"`.
 
 If the browser says “secure connection” / invalid response, it is forcing HTTPS. Use `http://localhost:9200` explicitly. Chrome may remember HTTPS from an older OpenSearch; clear HSTS for `localhost` at `chrome://net-internals/#hsts` if needed.
 
-### Terminal 2 — Ollama
-
-```bash
-ollama serve
-```
-
-On Windows, Ollama often already runs in the background after install. Confirm with:
-
-```bash
-curl http://localhost:11434
-```
-
-### Terminal 3 — Ingest and query
+### Terminal 2 — Ingest, query, and GUI
 
 Put PDFs or `.txt` files in `data/raw/`.
 
@@ -142,6 +134,7 @@ Put PDFs or `.txt` files in `data/raw/`.
 ```bash
 npm run ingest
 npm run query -- "Your question here"
+npm run api
 ```
 
 **With Python (activate `venv` first):**
@@ -196,7 +189,8 @@ python main.py --ingest
 | OpenSearch `ConnectionError` / connection closed | HTTPS + security OpenSearch, or wrong install | Use the Docker command above with `DISABLE_SECURITY_PLUGIN=true` |
 | Browser “can’t provide a secure connection” | Opening `https://localhost:9200` | Use **http://**localhost:9200 |
 | Port 9200 already in use | Another OpenSearch (e.g. ZIP install) still running | Stop that process, then `docker start native-rag-pipeline` |
-| Query fails / model not found | Wrong or missing Ollama model | `ollama pull llama3.2` |
+| Query fails with `GROQ_API_KEY is not set` | Missing Groq key | Add `GROQ_API_KEY=...` to `.env` |
+| Groq rate limit error | Free-tier request/token limit hit | Wait and retry, or switch to a lighter Groq model |
 | First ingest is slow | Downloading embedding/reranker models | One-time download; later runs are faster |
 
 ---
@@ -206,10 +200,10 @@ python main.py --ingest
 ```bash
 # Services
 docker start native-rag-pipeline
-ollama serve   # if not already running
 
 # Pipeline
 npm run ingest
+npm run api
 npm run query -- "What is this document about?"
 npm run delete-index
 ```

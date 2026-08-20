@@ -136,12 +136,20 @@ def keyword_search(query: str, k: int = TOP_K, filters: dict | None = None) -> l
     return _format_hits(res, search_type="keyword")
 
 
-def search(query: str, k: int = TOP_K) -> list[dict]:
-    return hybrid_search(query, k=k)
+def search(
+    query: str,
+    k: int = TOP_K,
+    filters: dict | None = None,
+) -> list[dict]:
+    return hybrid_search(query, k=k, filters=filters)
 
 
-def hybrid_search(query: str, k: int = TOP_K) -> list[dict]:
-    filters = _extract_filters(query)
+def hybrid_search(
+    query: str,
+    k: int = TOP_K,
+    filters: dict | None = None,
+) -> list[dict]:
+    filters = _merge_filters(_extract_filters(query), filters)
     if filters:
         print(f"  Applying metadata filters: {filters}")
 
@@ -222,6 +230,14 @@ def _extract_filters(query: str) -> dict:
         filters["company"] = company
 
     return filters
+
+
+def _merge_filters(parsed: dict, explicit: dict | None) -> dict:
+    merged = dict(parsed)
+    for key, value in (explicit or {}).items():
+        if value:
+            merged[key] = value
+    return merged
 
 
 def _extract_company(query: str) -> str | None:

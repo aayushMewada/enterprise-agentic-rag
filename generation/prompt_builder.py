@@ -6,6 +6,8 @@ SYSTEM_PROMPT = (
     "For preparation questions, summarize common rounds, technical topics, "
     "aptitude or coding areas, HR or behavioral themes, example questions, "
     "and practical preparation tips. "
+    "If the context is very short but directly answers the question, use it. "
+    "Do not reject a question only because there is one source or one sentence. "
     "If the answer is not in the context, say "
     "\"I don't have enough information to answer that.\" "
     "Do not make up information. "
@@ -14,7 +16,11 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_prompt(question: str, chunks: list[dict]) -> list[dict]:
+def build_prompt(
+    question: str,
+    chunks: list[dict],
+    chat_history: list[dict] | None = None,
+) -> list[dict]:
     context_parts = []
     for i, chunk in enumerate(chunks, 1):
         context_parts.append(
@@ -22,7 +28,8 @@ def build_prompt(question: str, chunks: list[dict]) -> list[dict]:
         )
 
     context = "\n\n".join(context_parts)
-    user_message = f"Context:\n{context}\n\nQuestion: {question}"
+    history = _format_history(chat_history or [])
+    user_message = f"{history}Context:\n{context}\n\nQuestion: {question}"
 
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -38,3 +45,17 @@ def _format_source(chunk: dict) -> str:
         return source
 
     return f"{source}, page {page}"
+
+
+def _format_history(chat_history: list[dict]) -> str:
+    if not chat_history:
+        return ""
+
+    recent = chat_history[-6:]
+    lines = ["Recent conversation:"]
+    for message in recent:
+        role = message.get("role", "user")
+        content = message.get("content", "")
+        lines.append(f"{role}: {content}")
+
+    return "\n".join(lines) + "\n\n"

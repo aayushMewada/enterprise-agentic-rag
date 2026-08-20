@@ -1,14 +1,10 @@
 from dotenv import load_dotenv
 import sys
 
-from config.settings import TOP_K, RERANK_TOP_N
-from generation.llm_client import get_answer
-from generation.prompt_builder import build_prompt
 from ingestion.chunker import chunk_documents
 from ingestion.document_loader import discover_sources, load_documents_by_source
 from ingestion.manifest import diff_sources, load_manifest, save_manifest
-from retrieval.reranker import rerank_chunks
-from retrieval.retriever import retrieve_chunks
+from rag.query_engine import build_debug_payload, run_query
 from retrieval.vector_store import add_chunks, create_index, delete_sources
 
 load_dotenv()
@@ -58,15 +54,13 @@ def ingest(data_dir: str = "data/raw"):
 
 
 def query(question: str, show_prompt: bool = False) -> str:
-    raw = retrieve_chunks(question, k=TOP_K)
-    ranked = rerank_chunks(question, raw, top_n=RERANK_TOP_N)
-    prompt = build_prompt(question, ranked)
-
     if show_prompt:
-        _print_debug_prompt(ranked, prompt)
+        payload = build_debug_payload(question)
+        _print_debug_prompt(payload["chunks"], payload["prompt"])
         return ""
 
-    answer = get_answer(prompt)
+    result = run_query(question)
+    answer = result["answer"]
     _safe_print(f"\nAnswer: {answer}")
     return answer
 

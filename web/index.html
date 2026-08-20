@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interview RAG</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>Interview RAG</h1>
+          <p id="status">Checking backend...</p>
+        </div>
+        <div class="top-actions">
+          <button id="chatTab" class="tab-button active" type="button">Chat</button>
+          <button id="docsTab" class="tab-button" type="button">Documents</button>
+          <button id="clearChat" class="ghost-button" type="button">Clear chat</button>
+        </div>
+      </header>
+
+      <section id="chatView" class="chat-pane view active">
+        <div class="filters">
+          <label>
+            Year
+            <select id="yearFilter">
+              <option value="">All years</option>
+            </select>
+          </label>
+          <label>
+            Company
+            <select id="companyFilter">
+              <option value="">All companies</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="messages" class="messages"></div>
+
+        <form id="queryForm" class="composer">
+          <textarea
+            id="question"
+            rows="3"
+            placeholder="Ask about interview rounds, coding questions, HR themes, or preparation..."
+          ></textarea>
+          <div class="composer-actions">
+            <label class="debug-toggle">
+              <input id="debugMode" type="checkbox" />
+              Show chunks
+            </label>
+            <span id="activeFilters" class="active-filters">Filters: all years, all companies</span>
+            <button id="askButton" type="submit">Ask</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="docsView" class="docs-pane view">
+        <div class="panel-heading">
+          <div>
+            <h2>Documents</h2>
+            <p>Upload, index, or remove source files.</p>
+          </div>
+          <button id="refreshDocs" class="ghost-button" type="button">Refresh</button>
+        </div>
+
+        <div class="docs-layout">
+          <form id="uploadForm" class="upload-form">
+            <label>
+              Year
+              <input id="uploadYear" name="year" placeholder="2027" required />
+            </label>
+            <label>
+              Company
+              <input id="uploadCompany" name="company" placeholder="Quantiphi" required />
+            </label>
+            <label class="file-field">
+              PDF or TXT
+              <input id="uploadFile" name="file" type="file" accept=".pdf,.txt" required />
+            </label>
+            <button id="uploadButton" type="submit">Upload and index</button>
+          </form>
+
+          <div class="admin-actions">
+            <button id="ingestChanged" class="secondary-button" type="button">Index changed files</button>
+            <button id="removeAllIndex" class="danger-button" type="button">Remove all from index</button>
+          </div>
+        </div>
+
+        <div id="docList" class="doc-list"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
