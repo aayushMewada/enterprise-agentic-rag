@@ -1,139 +1,88 @@
-from opensearchpy import OpenSearch
-from opensearchpy.helpers import bulk
 import re
+import uuid
+
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    MatchAny,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 from ingestion.embedder import get_embedding_model
 from config.settings import (
-    OPENSEARCH_HOST,
-    OPENSEARCH_PORT,
-    OPENSEARCH_INDEX,
     EMBEDDING_DIM,
+    QDRANT_API_KEY,
+    QDRANT_COLLECTION,
+    QDRANT_URL,
     TOP_K,
 )
 
 
-def _client():
-    return OpenSearch(
-        hosts=[{"host": OPENSEARCH_HOST, "port": OPENSEARCH_PORT}],
-        use_ssl=False,
-    )
+def _client() -> QdrantClient:
+    if not QDRANT_URL:
+        raise RuntimeError("QDRANT_URL is not set. Add it to your .env file.")
+    if not QDRANT_API_KEY:
+        raise RuntimeError("QDRANT_API_KEY is not set. Add it to your .env file.")
 
-
-SOURCE_FIELDS = [
-    "text",
-    "source",
-    "page_start",
-    "year",
-    "company",
-]
-RRF_K = 60
+    return QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
 
 def create_index():
     c = _client()
-    if c.indices.exists(index=OPENSEARCH_INDEX):
-        print(" Index already exists — skipping")
+    if c.collection_exists(QDRANT_COLLECTION):
+        _create_payload_indexes(c)
+        print(" Qdrant collection already exists - skipping")
         return
 
-    # Exact KNN — no method block needed
-    c.indices.create(
-        index=OPENSEARCH_INDEX,
-        body={
-            "settings": {"index": {"knn": True}},
-            "mappings": {
-                "properties": {
-                    "text": {"type": "text"},
-                    "source": {"type": "keyword"},
-                    "chunk_id": {"type": "keyword"},
-                    "page_start": {"type": "integer"},
-                    "year": {"type": "keyword"},
-                    "company": {"type": "keyword"},
-                    "vector": {
-                        "type": "knn_vector",
-                        "dimension": EMBEDDING_DIM,
-                        # no method block = exact KNN search
-                    },
-                }
-            },
-        },
+    c.create_collection(
+        collection_name=QDRANT_COLLECTION,
+        vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
     )
-    print(f" Index '{OPENSEARCH_INDEX}' created with exact KNN")
+    _create_payload_indexes(c)
+    print(f" Qdrant collection '{QDRANT_COLLECTION}' created")
 
 
 def add_chunks(chunks: list[dict]):
     if not chunks:
-        print(" 0 chunks to store in OpenSearch")
+        print(" 0 chunks to store in Qdrant")
         return
 
+    create_index()
     c = _client()
     model = get_embedding_model()
     texts = [ch["text"] for ch in chunks]
     print(f" Embedding {len(chunks)} chunk(s)")
     vectors = model.embed_documents(texts)
-    print(" Writing chunks to OpenSearch with bulk indexing")
+    print(" Writing chunks to Qdrant")
 
-    actions = (
-        {
-            "_op_type": "index",
-            "_index": OPENSEARCH_INDEX,
-            "_id": chunk["id"],
-            "_source": {
+    points = [
+        PointStruct(
+            id=_point_id(chunk["id"]),
+            vector=vector,
+            payload={
                 "chunk_id": chunk["id"],
                 "text": chunk["text"],
                 "source": chunk["source"],
                 "page_start": chunk.get("page_start"),
                 "year": chunk.get("year"),
                 "company": chunk.get("company"),
-                "vector": vector,
             },
-        }
+        )
         for chunk, vector in zip(chunks, vectors)
+    ]
+
+    c.upload_points(
+        collection_name=QDRANT_COLLECTION,
+        points=points,
+        batch_size=256,
+        wait=True,
     )
-
-    bulk(c, actions, chunk_size=500, request_timeout=120)
-    c.indices.refresh(index=OPENSEARCH_INDEX)
-    print(f" {len(chunks)} chunks stored in OpenSearch")
-
-
-def vector_search(query: str, k: int = TOP_K, filters: dict | None = None) -> list[dict]:
-    c = _client()
-    model = get_embedding_model()
-    vector = model.embed_query(query)
-    knn_query = {"knn": {"vector": {"vector": vector, "k": k}}}
-
-    res = c.search(
-        index=OPENSEARCH_INDEX,
-        body={
-            "size": k,
-            "query": _with_filters(knn_query, filters),
-            "_source": SOURCE_FIELDS,
-        },
-    )
-
-    return _format_hits(res, search_type="vector")
-
-
-def keyword_search(query: str, k: int = TOP_K, filters: dict | None = None) -> list[dict]:
-    c = _client()
-    match_query = {
-        "match": {
-            "text": {
-                "query": query,
-                "operator": "or",
-            }
-        }
-    }
-
-    res = c.search(
-        index=OPENSEARCH_INDEX,
-        body={
-            "size": k,
-            "query": _with_filters(match_query, filters),
-            "_source": SOURCE_FIELDS,
-        },
-    )
-
-    return _format_hits(res, search_type="keyword")
+    print(f" {len(chunks)} chunks stored in Qdrant")
 
 
 def search(
@@ -141,82 +90,90 @@ def search(
     k: int = TOP_K,
     filters: dict | None = None,
 ) -> list[dict]:
-    return hybrid_search(query, k=k, filters=filters)
+    return vector_search(query, k=k, filters=filters)
 
 
-def hybrid_search(
-    query: str,
-    k: int = TOP_K,
-    filters: dict | None = None,
-) -> list[dict]:
+def vector_search(query: str, k: int = TOP_K, filters: dict | None = None) -> list[dict]:
     filters = _merge_filters(_extract_filters(query), filters)
     if filters:
         print(f"  Applying metadata filters: {filters}")
 
-    vector_results = vector_search(query, k=k, filters=filters)
-    keyword_results = keyword_search(query, k=k, filters=filters)
-    fused = {}
+    c = _client()
+    model = get_embedding_model()
+    vector = model.embed_query(query)
 
-    for results in (vector_results, keyword_results):
-        for rank, result in enumerate(results, start=1):
-            chunk_id = result["chunk_id"]
-            if chunk_id not in fused:
-                fused[chunk_id] = {
-                    **result,
-                    "score": 0.0,
-                    "vector_score": None,
-                    "keyword_score": None,
-                }
+    res = c.query_points(
+        collection_name=QDRANT_COLLECTION,
+        query=vector,
+        query_filter=_to_qdrant_filter(filters),
+        with_payload=True,
+        limit=k,
+    ).points
 
-            fused[chunk_id]["score"] += 1 / (RRF_K + rank)
-            if result["search_type"] == "vector":
-                fused[chunk_id]["vector_score"] = result["score"]
-            elif result["search_type"] == "keyword":
-                fused[chunk_id]["keyword_score"] = result["score"]
-
-    ranked = sorted(fused.values(), key=lambda item: item["score"], reverse=True)
-    for result in ranked:
-        result["score"] = round(result["score"], 6)
-        result.pop("search_type", None)
-
-    return ranked[:k]
+    return [_format_point(point) for point in res]
 
 
-def _format_hits(res, search_type: str) -> list[dict]:
-    return [
-        {
-            "chunk_id": h["_id"],
-            "text": h["_source"]["text"],
-            "source": h["_source"]["source"],
-            "page_start": h["_source"].get("page_start"),
-            "year": h["_source"].get("year"),
-            "company": h["_source"].get("company"),
-            "score": round(h["_score"], 4),
-            "search_type": search_type,
-        }
-        for h in res["hits"]["hits"]
-    ]
+def delete_index():
+    c = _client()
+    if c.collection_exists(QDRANT_COLLECTION):
+        c.delete_collection(QDRANT_COLLECTION)
+        print(" Qdrant collection deleted")
 
 
-def _with_filters(query: dict, filters: dict | None) -> dict:
-    if not filters:
-        return query
+def delete_sources(sources: list[str]):
+    if not sources:
+        return
 
-    filter_clauses = []
-    if filters.get("year"):
-        filter_clauses.append({"term": {"year": filters["year"]}})
-    if filters.get("company"):
-        filter_clauses.append({"term": {"company": filters["company"]}})
+    c = _client()
+    if not c.collection_exists(QDRANT_COLLECTION):
+        return
 
-    if not filter_clauses:
-        return query
+    c.delete(
+        collection_name=QDRANT_COLLECTION,
+        points_selector=FilterSelector(
+            filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="source",
+                        match=MatchAny(any=sources),
+                    )
+                ]
+            )
+        ),
+        wait=True,
+    )
+    print(f" Deleted stale chunk(s) from Qdrant for {len(sources)} source file(s)")
 
+
+def _format_point(point) -> dict:
+    payload = point.payload or {}
     return {
-        "bool": {
-            "must": query,
-            "filter": filter_clauses,
-        }
+        "chunk_id": payload.get("chunk_id") or str(point.id),
+        "text": payload.get("text", ""),
+        "source": payload.get("source"),
+        "page_start": payload.get("page_start"),
+        "year": payload.get("year"),
+        "company": payload.get("company"),
+        "score": round(float(point.score or 0.0), 6),
     }
+
+
+def _to_qdrant_filter(filters: dict | None) -> Filter | None:
+    if not filters:
+        return None
+
+    must = []
+    if filters.get("year"):
+        must.append(FieldCondition(key="year", match=MatchValue(value=filters["year"])))
+    if filters.get("company"):
+        must.append(
+            FieldCondition(key="company", match=MatchValue(value=filters["company"]))
+        )
+
+    if not must:
+        return None
+
+    return Filter(must=must)
 
 
 def _extract_filters(query: str) -> dict:
@@ -241,26 +198,9 @@ def _merge_filters(parsed: dict, explicit: dict | None) -> dict:
 
 
 def _extract_company(query: str) -> str | None:
-    c = _client()
-    res = c.search(
-        index=OPENSEARCH_INDEX,
-        body={
-            "size": 0,
-            "aggs": {
-                "companies": {
-                    "terms": {
-                        "field": "company",
-                        "size": 1000,
-                    }
-                }
-            },
-        },
-    )
-
     query_norm = _normalize_for_match(query)
     matches = []
-    for bucket in res["aggregations"]["companies"]["buckets"]:
-        company = bucket["key"]
+    for company in _known_companies():
         company_norm = _normalize_for_match(company)
         if company_norm and company_norm in query_norm:
             matches.append(company)
@@ -271,29 +211,48 @@ def _extract_company(query: str) -> str | None:
     return max(matches, key=len)
 
 
+def _known_companies() -> set[str]:
+    c = _client()
+    if not c.collection_exists(QDRANT_COLLECTION):
+        return set()
+
+    companies = set()
+    offset = None
+    while True:
+        points, offset = c.scroll(
+            collection_name=QDRANT_COLLECTION,
+            scroll_filter=None,
+            limit=1000,
+            offset=offset,
+            with_payload=["company"],
+            with_vectors=False,
+        )
+        for point in points:
+            company = (point.payload or {}).get("company")
+            if company:
+                companies.add(company)
+
+        if offset is None:
+            break
+
+    return companies
+
+
+def _create_payload_indexes(c: QdrantClient):
+    for field in ("source", "year", "company"):
+        try:
+            c.create_payload_index(
+                collection_name=QDRANT_COLLECTION,
+                field_name=field,
+                field_schema="keyword",
+            )
+        except Exception:
+            pass
+
+
+def _point_id(chunk_id: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, chunk_id))
+
+
 def _normalize_for_match(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", text.lower())).strip()
-
-
-def delete_index():
-    c = _client()
-    if c.indices.exists(index=OPENSEARCH_INDEX):
-        c.indices.delete(index=OPENSEARCH_INDEX)
-        print(" Index deleted")
-
-
-def delete_sources(sources: list[str]):
-    if not sources:
-        return
-
-    c = _client()
-    if not c.indices.exists(index=OPENSEARCH_INDEX):
-        return
-
-    res = c.delete_by_query(
-        index=OPENSEARCH_INDEX,
-        body={"query": {"terms": {"source": sources}}},
-        refresh=True,
-        conflicts="proceed",
-    )
-    print(f" Deleted {res.get('deleted', 0)} stale chunk(s) from OpenSearch")

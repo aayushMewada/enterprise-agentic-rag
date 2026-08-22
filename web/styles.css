@@ -241,25 +241,79 @@ textarea:focus {
   color: #202b3c;
 }
 
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
 .markdown strong {
   color: #111827;
 }
 
-.markdown .bullet {
-  position: relative;
-  margin: 6px 0;
-  padding-left: 18px;
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown table,
+.markdown pre,
+.markdown blockquote {
+  margin: 10px 0;
 }
 
-.markdown .bullet::before {
-  content: "";
-  position: absolute;
-  left: 3px;
-  top: 0.72em;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
+.markdown ul,
+.markdown ol {
+  padding-left: 22px;
+}
+
+.markdown li {
+  margin: 5px 0;
+}
+
+.markdown table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.markdown th,
+.markdown td {
+  min-width: 130px;
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown th {
+  background: var(--panel-soft);
+  color: var(--text);
+  font-weight: 800;
+}
+
+.markdown code {
+  border-radius: 4px;
+  background: var(--panel-soft);
+  padding: 2px 4px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.markdown pre {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  padding: 10px;
+}
+
+.markdown pre code {
+  background: transparent;
+  padding: 0;
 }
 
 .citations,

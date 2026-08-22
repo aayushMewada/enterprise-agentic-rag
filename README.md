@@ -1,12 +1,12 @@
 # Native RAG Pipeline
 
-A Retrieval-Augmented Generation (RAG) pipeline for job interview experiences. It uses local embeddings/OpenSearch for retrieval and Groq for hosted LLM answers.
+A Retrieval-Augmented Generation (RAG) pipeline for job interview experiences. It uses local embeddings, Qdrant Cloud for vector search, and Groq for hosted LLM answers.
 
 Works on **Windows**, **macOS**, and **Linux**.
 
 ## Quick start
 
-Full step-by-step instructions (setup, Docker OpenSearch, ingest, query, troubleshooting):
+Full step-by-step instructions (setup, Qdrant, ingest, query, troubleshooting):
 
 **→ [HOW_TO_RUN.md](HOW_TO_RUN.md)**
 
@@ -15,7 +15,7 @@ Short version:
 1. Copy `.env.example` → `.env`
 2. `npm install` (creates `venv/` and installs deps) **or** create `venv` and `pip install -r requirements.txt`
 3. Add `GROQ_API_KEY` to `.env`
-4. Start OpenSearch with Docker (`DISABLE_SECURITY_PLUGIN=true`) — see [HOW_TO_RUN.md](HOW_TO_RUN.md)
+4. Add `QDRANT_URL`, `QDRANT_API_KEY`, and `QDRANT_COLLECTION` to `.env`
 5. Put PDFs/txt in `data/raw/`
 6. `npm run ingest`, then `npm run api` for the GUI or `npm run query -- "Your question"`
 
@@ -39,7 +39,7 @@ rag-pipeline/
 │   └── ingest_pipeline.py       ← load → chunk → embed → store
 │
 ├── retrieval/
-│   ├── vector_store.py          ← OpenSearch index + KNN search
+│   ├── vector_store.py          ← Qdrant collection + vector search
 │   ├── retriever.py             ← query embedding + search
 │   └── reranker.py              ← cross-encoder reranking
 │
@@ -64,7 +64,7 @@ rag-pipeline/
 |------|---------|
 | Python 3.10+ | Pipeline runtime |
 | Node.js (optional) | `npm install` / `npm run ingest` convenience scripts |
-| Docker Desktop | OpenSearch (HTTP on port 9200, security disabled) |
+| Qdrant Cloud | Hosted vector database for chunks and embeddings |
 | Groq API key | Hosted LLM for answers |
 
 ## npm scripts
@@ -72,10 +72,10 @@ rag-pipeline/
 | Command | What it does |
 |---------|----------------|
 | `npm install` | Creates `venv/` and installs Python deps |
-| `npm run ingest` | Load → chunk → embed → store into OpenSearch |
+| `npm run ingest` | Load → chunk → embed → store into Qdrant |
 | `npm run api` | Start the local browser GUI/API |
 | `npm run query -- "..."` | Retrieve + rerank + answer via Groq |
-| `npm run delete-index` | Delete the `rag_index` OpenSearch index |
+| `npm run delete-index` | Delete the Qdrant collection |
 
 Always use the project `venv` (or these npm scripts). System Python will fail with missing packages.
 
@@ -84,19 +84,18 @@ Always use the project `venv` (or these npm scripts). System Python will fail wi
 | Layer | Default |
 |-------|---------|
 | Embeddings | `all-MiniLM-L6-v2` (local) |
-| Vector store | OpenSearch 2.x KNN |
+| Vector store | Qdrant Cloud |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
 | LLM | Groq `openai/gpt-oss-120b` |
 
-Config lives in `config/settings.py`. Groq model and OpenSearch host/port can be overridden in `.env`.
+Config lives in `config/settings.py`. Groq model and Qdrant connection details can be overridden in `.env`.
 
 ## Important notes
 
-- OpenSearch must be reachable at **http://localhost:9200** (plain HTTP). A ZIP/native install with TLS/security on will not work with the default client.
-- Do not start a second OpenSearch on port 9200 (e.g. `C:\opensearch-…`) while the Docker container is running.
 - `GROQ_API_KEY` must be set in `.env` before asking LLM-backed questions.
+- `QDRANT_URL` and `QDRANT_API_KEY` must be set before ingestion or retrieval.
 - First ingest/query downloads embedding and reranker models (hundreds of MB). That is expected once.
-- Wipe the index before re-ingesting if documents changed (`npm run delete-index`).
+- Re-ingestion is incremental. Use `npm run delete-index` only when you want to wipe the Qdrant collection.
 
 ## Author
 

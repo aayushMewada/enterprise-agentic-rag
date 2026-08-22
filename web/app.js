@@ -167,7 +167,7 @@ els.ingestChanged.addEventListener("click", async () => {
 });
 
 els.removeAllIndex.addEventListener("click", async () => {
-  const confirmed = window.confirm("Remove all chunks from the OpenSearch index? Source PDFs will stay in data/raw.");
+  const confirmed = window.confirm("Remove all chunks from the Qdrant index? Source PDFs will stay in data/raw.");
   if (!confirmed) return;
 
   setBusy(els.removeAllIndex, true, "Removing...");
@@ -443,14 +443,24 @@ async function parseResponse(response) {
 }
 
 function renderMarkdown(text) {
-  const escaped = escapeHtml(text);
-  return escaped
-    .replace(/^### (.*)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.*)$/gm, "<h2>$1</h2>")
-    .replace(/^\*\*(.*)\*\*$/gm, "<h3>$1</h3>")
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/^\s*[-*]\s+(.*)$/gm, "<div class=\"bullet\">$1</div>")
-    .replace(/\n/g, "<br>");
+  const normalized = normalizeMarkdown(text);
+
+  if (window.marked && window.DOMPurify) {
+    window.marked.setOptions({
+      breaks: true,
+      gfm: true,
+    });
+    return window.DOMPurify.sanitize(window.marked.parse(normalized));
+  }
+
+  return escapeHtml(normalized).replace(/\n/g, "<br>");
+}
+
+function normalizeMarkdown(text) {
+  return text
+    .replace(/[ \t]*\\[ \t]*\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function escapeHtml(text) {

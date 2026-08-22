@@ -10,8 +10,8 @@ Install these first:
 |------|--------|
 | **Python 3.10+** | Windows: enable **Add Python to PATH** during install |
 | **Node.js** (optional) | Needed only if you want `npm` scripts |
-| **Docker Desktop** | Must be running before you start OpenSearch |
 | **Groq API key** | Needed for LLM answers |
+| **Qdrant Cloud account** | Needed for hosted vector search |
 
 ## One-time setup
 
@@ -39,8 +39,9 @@ Defaults:
 GROQ_API_KEY=your_groq_api_key_here
 LLM_MODEL=openai/gpt-oss-120b
 LLM_MAX_TOKENS=1500
-OPENSEARCH_HOST=localhost
-OPENSEARCH_PORT=9200
+QDRANT_URL=https://your-qdrant-cluster-url
+QDRANT_API_KEY=your_qdrant_api_key_here
+QDRANT_COLLECTION=rag_chunks
 ```
 
 ### 3. Install Python dependencies
@@ -79,53 +80,21 @@ LLM_MODEL=openai/gpt-oss-120b
 LLM_MAX_TOKENS=1500
 ```
 
+### 5. Add your Qdrant Cloud details
+
+Create a free Qdrant Cloud cluster, then put these in `.env`:
+
+```env
+QDRANT_URL=https://your-qdrant-cluster-url
+QDRANT_API_KEY=your_qdrant_api_key_here
+QDRANT_COLLECTION=rag_chunks
+```
+
 ---
 
 ## Every session — run in this order
 
-### Terminal 1 — OpenSearch (Docker)
-
-**Do not use a ZIP/native OpenSearch install with security enabled.** This project expects plain **HTTP** on port 9200 with the security plugin disabled.
-
-Make sure Docker Desktop is running, then:
-
-**First time only** (create the container):
-
-```powershell
-# Windows PowerShell — if `docker` is not found, prepend Docker to PATH:
-# $env:Path = "C:\Program Files\Docker\Docker\resources\bin;" + $env:Path
-
-docker run -d --name native-rag-pipeline `
-  -p 9200:9200 -p 9600:9600 `
-  -e "discovery.type=single-node" `
-  -e "DISABLE_SECURITY_PLUGIN=true" `
-  -e "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" `
-  opensearchproject/opensearch:2
-```
-
-```bash
-# macOS / Linux
-docker run -d --name native-rag-pipeline \
-  -p 9200:9200 -p 9600:9600 \
-  -e "discovery.type=single-node" \
-  -e "DISABLE_SECURITY_PLUGIN=true" \
-  -e "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" \
-  opensearchproject/opensearch:2
-```
-
-**Later sessions:**
-
-```bash
-docker start native-rag-pipeline
-```
-
-**Verify:** open **http://localhost:9200** (not `https://`).
-
-You should see JSON with `"cluster_name" : "docker-cluster"`.
-
-If the browser says “secure connection” / invalid response, it is forcing HTTPS. Use `http://localhost:9200` explicitly. Chrome may remember HTTPS from an older OpenSearch; clear HSTS for `localhost` at `chrome://net-internals/#hsts` if needed.
-
-### Terminal 2 — Ingest, query, and GUI
+### Terminal 1 — Ingest, query, and GUI
 
 Put PDFs or `.txt` files in `data/raw/`.
 
@@ -186,10 +155,8 @@ python main.py --ingest
 | Symptom | Cause | Fix |
 |---------|--------|-----|
 | `No module named 'dotenv'` | System Python, not `venv` | `venv\Scripts\activate` or `npm run ingest` |
-| OpenSearch `ConnectionError` / connection closed | HTTPS + security OpenSearch, or wrong install | Use the Docker command above with `DISABLE_SECURITY_PLUGIN=true` |
-| Browser “can’t provide a secure connection” | Opening `https://localhost:9200` | Use **http://**localhost:9200 |
-| Port 9200 already in use | Another OpenSearch (e.g. ZIP install) still running | Stop that process, then `docker start native-rag-pipeline` |
 | Query fails with `GROQ_API_KEY is not set` | Missing Groq key | Add `GROQ_API_KEY=...` to `.env` |
+| Query or ingest fails with `QDRANT_URL` / `QDRANT_API_KEY` | Missing Qdrant config | Add Qdrant values to `.env` |
 | Groq rate limit error | Free-tier request/token limit hit | Wait and retry, or switch to a lighter Groq model |
 | First ingest is slow | Downloading embedding/reranker models | One-time download; later runs are faster |
 
@@ -198,10 +165,6 @@ python main.py --ingest
 ## Quick reference
 
 ```bash
-# Services
-docker start native-rag-pipeline
-
-# Pipeline
 npm run ingest
 npm run api
 npm run query -- "What is this document about?"

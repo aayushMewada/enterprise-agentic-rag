@@ -50,7 +50,7 @@ def ingest(data_dir: str = "data/raw"):
     add_chunks(chunks)
     save_manifest(current_manifest)
 
-    print("Ingestion complete. Chunks stored in OpenSearch.\n")
+    print("Ingestion complete. Chunks stored in Qdrant.\n")
 
 
 def query(question: str, show_prompt: bool = False) -> str:

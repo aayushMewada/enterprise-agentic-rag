@@ -9,7 +9,7 @@ def run_ingestion(data_dir: str = "data/raw"):
     chunks = chunk_documents(docs)
     create_index()
     add_chunks(chunks)
-    print(f"\nDone — {len(chunks)} chunks in OpenSearch")
+    print(f"\nDone — {len(chunks)} chunks in Qdrant")
 
 
 if __name__ == "__main__":
