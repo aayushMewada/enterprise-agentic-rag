@@ -1,5 +1,7 @@
 import re
+import time
 import uuid
+from threading import Lock
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -21,6 +23,13 @@ from config.settings import (
     QDRANT_URL,
     TOP_K,
 )
+
+_DOCUMENT_CACHE = {
+    "loaded_at": 0.0,
+    "documents": None,
+}
+_DOCUMENT_CACHE_LOCK = Lock()
+_DOCUMENT_CACHE_TTL_SECONDS = 300
 
 
 def _client() -> QdrantClient:
@@ -82,6 +91,7 @@ def add_chunks(chunks: list[dict]):
         batch_size=256,
         wait=True,
     )
+    _clear_document_cache()
     print(f" {len(chunks)} chunks stored in Qdrant")
 
 
@@ -117,6 +127,7 @@ def delete_index():
     c = _client()
     if c.collection_exists(QDRANT_COLLECTION):
         c.delete_collection(QDRANT_COLLECTION)
+        _clear_document_cache()
         print(" Qdrant collection deleted")
 
 
@@ -142,7 +153,68 @@ def delete_sources(sources: list[str]):
         ),
         wait=True,
     )
+    _clear_document_cache()
     print(f" Deleted stale chunk(s) from Qdrant for {len(sources)} source file(s)")
+
+
+def list_indexed_documents() -> list[dict]:
+    cached = _get_document_cache()
+    if cached is not None:
+        return cached
+
+    with _DOCUMENT_CACHE_LOCK:
+        cached = _get_document_cache()
+        if cached is not None:
+            return cached
+
+        documents = _load_indexed_documents()
+        _DOCUMENT_CACHE["loaded_at"] = time.time()
+        _DOCUMENT_CACHE["documents"] = documents
+        return documents
+
+
+def _load_indexed_documents() -> list[dict]:
+    c = _client()
+    if not c.collection_exists(QDRANT_COLLECTION):
+        return []
+
+    documents = {}
+    offset = None
+    while True:
+        points, offset = c.scroll(
+            collection_name=QDRANT_COLLECTION,
+            scroll_filter=None,
+            limit=1000,
+            offset=offset,
+            with_payload=["source", "year", "company"],
+            with_vectors=False,
+        )
+        for point in points:
+            payload = point.payload or {}
+            source = payload.get("source")
+            if not source or source in documents:
+                continue
+
+            documents[source] = {
+                "source": source,
+                "year": payload.get("year"),
+                "company": payload.get("company"),
+                "size": None,
+                "mtime_ns": None,
+                "storage": "qdrant",
+            }
+
+        if offset is None:
+            break
+
+    return sorted(documents.values(), key=lambda doc: doc["source"])
+
+
+def indexed_metadata_options() -> dict:
+    documents = list_indexed_documents()
+    years = sorted({doc["year"] for doc in documents if doc["year"]})
+    companies = sorted({doc["company"] for doc in documents if doc["company"]})
+    return {"years": years, "companies": companies}
 
 
 def _format_point(point) -> dict:
@@ -212,30 +284,7 @@ def _extract_company(query: str) -> str | None:
 
 
 def _known_companies() -> set[str]:
-    c = _client()
-    if not c.collection_exists(QDRANT_COLLECTION):
-        return set()
-
-    companies = set()
-    offset = None
-    while True:
-        points, offset = c.scroll(
-            collection_name=QDRANT_COLLECTION,
-            scroll_filter=None,
-            limit=1000,
-            offset=offset,
-            with_payload=["company"],
-            with_vectors=False,
-        )
-        for point in points:
-            company = (point.payload or {}).get("company")
-            if company:
-                companies.add(company)
-
-        if offset is None:
-            break
-
-    return companies
+    return {doc["company"] for doc in list_indexed_documents() if doc.get("company")}
 
 
 def _create_payload_indexes(c: QdrantClient):
@@ -256,3 +305,20 @@ def _point_id(chunk_id: str) -> str:
 
 def _normalize_for_match(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", text.lower())).strip()
+
+
+def _get_document_cache() -> list[dict] | None:
+    documents = _DOCUMENT_CACHE["documents"]
+    if documents is None:
+        return None
+
+    if time.time() - _DOCUMENT_CACHE["loaded_at"] > _DOCUMENT_CACHE_TTL_SECONDS:
+        return None
+
+    return documents
+
+
+def _clear_document_cache():
+    with _DOCUMENT_CACHE_LOCK:
+        _DOCUMENT_CACHE["loaded_at"] = 0.0
+        _DOCUMENT_CACHE["documents"] = None

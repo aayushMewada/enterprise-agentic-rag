@@ -79,6 +79,16 @@ rag-pipeline/
 
 Always use the project `venv` (or these npm scripts). System Python will fail with missing packages.
 
+## Deployment mode
+
+For the first hosted version, deploy in query-only mode:
+
+```env
+QUERY_ONLY_MODE=true
+```
+
+In this mode the app reads document/filter metadata from Qdrant and disables upload/delete controls. Manage ingestion locally, then push chunks to Qdrant with `npm run ingest`.
+
 ## Stack
 
 | Layer | Default |

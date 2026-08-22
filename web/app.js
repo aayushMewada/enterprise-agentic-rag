@@ -1,6 +1,10 @@
 const state = {
   chatHistory: [],
   documents: [],
+  capabilities: {
+    query_only: false,
+    document_management: true,
+  },
 };
 
 const els = {
@@ -31,6 +35,7 @@ boot();
 async function boot() {
   wireUi();
   await checkHealth();
+  await loadCapabilities();
   await Promise.all([loadMetadata(), loadDocuments()]);
 }
 
@@ -73,6 +78,25 @@ async function checkHealth() {
   } catch (error) {
     updateStatus("Backend unavailable");
   }
+}
+
+async function loadCapabilities() {
+  try {
+    state.capabilities = await apiGet("/capabilities");
+  } catch (error) {
+    state.capabilities = {
+      query_only: false,
+      document_management: true,
+    };
+  }
+  applyCapabilities();
+}
+
+function applyCapabilities() {
+  const canManageDocuments = state.capabilities.document_management;
+  els.uploadForm.hidden = !canManageDocuments;
+  els.ingestChanged.hidden = !canManageDocuments;
+  els.removeAllIndex.hidden = !canManageDocuments;
 }
 
 async function loadMetadata() {
@@ -391,6 +415,7 @@ function renderDocuments() {
     remove.className = "danger-button";
     remove.type = "button";
     remove.textContent = "Delete file and chunks";
+    remove.hidden = !state.capabilities.document_management;
     remove.addEventListener("click", async () => {
       const confirmed = window.confirm(`Delete ${doc.source} from disk and index?`);
       if (!confirmed) return;
@@ -398,7 +423,10 @@ function renderDocuments() {
       await Promise.all([loadMetadata(), loadDocuments()]);
     });
 
-    card.append(title, meta, remove);
+    card.append(title, meta);
+    if (state.capabilities.document_management) {
+      card.appendChild(remove);
+    }
     els.docList.appendChild(card);
   }
 }
@@ -492,6 +520,7 @@ function scrollMessages() {
 }
 
 function formatBytes(bytes) {
+  if (typeof bytes !== "number") return "Indexed in Qdrant";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

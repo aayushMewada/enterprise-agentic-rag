@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from config.settings import QUERY_ONLY_MODE
 from rag.documents import (
     ingest_changed_documents,
     list_documents,
@@ -68,6 +69,14 @@ def index():
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/capabilities")
+def capabilities():
+    return {
+        "query_only": QUERY_ONLY_MODE,
+        "document_management": not QUERY_ONLY_MODE,
+    }
 
 
 @app.get("/metadata")

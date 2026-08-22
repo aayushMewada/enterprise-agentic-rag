@@ -1,14 +1,24 @@
 from pathlib import Path
 import re
 
-from config.settings import DATA_RAW_DIR
+from config.settings import DATA_RAW_DIR, QUERY_ONLY_MODE
 from ingestion.chunker import chunk_documents
 from ingestion.document_loader import discover_sources, load_documents_by_source
 from ingestion.manifest import diff_sources, load_manifest, save_manifest
-from retrieval.vector_store import add_chunks, create_index, delete_index, delete_sources
+from retrieval.vector_store import (
+    add_chunks,
+    create_index,
+    delete_index,
+    delete_sources,
+    indexed_metadata_options,
+    list_indexed_documents,
+)
 
 
 def list_documents() -> list[dict]:
+    if QUERY_ONLY_MODE:
+        return list_indexed_documents()
+
     sources = discover_sources(DATA_RAW_DIR)
     return [
         {
@@ -23,6 +33,9 @@ def list_documents() -> list[dict]:
 
 
 def metadata_options() -> dict:
+    if QUERY_ONLY_MODE:
+        return indexed_metadata_options()
+
     documents = list_documents()
     years = sorted({doc["year"] for doc in documents if doc["year"]})
     companies = sorted({doc["company"] for doc in documents if doc["company"]})
@@ -30,6 +43,8 @@ def metadata_options() -> dict:
 
 
 def ingest_changed_documents() -> dict:
+    _ensure_document_management_enabled()
+
     create_index()
     current_manifest = discover_sources(DATA_RAW_DIR)
     previous_manifest = load_manifest()
@@ -56,6 +71,8 @@ def ingest_changed_documents() -> dict:
 
 
 def save_upload(filename: str, content: bytes, year: str, company: str) -> dict:
+    _ensure_document_management_enabled()
+
     safe_filename = _safe_filename(filename)
     safe_year = _safe_part(year)
     safe_company = _safe_part(company)
@@ -73,6 +90,8 @@ def save_upload(filename: str, content: bytes, year: str, company: str) -> dict:
 
 
 def remove_document(source: str, delete_file: bool = True) -> dict:
+    _ensure_document_management_enabled()
+
     source = _safe_source(source)
     raw_file = Path(DATA_RAW_DIR) / source
 
@@ -86,6 +105,8 @@ def remove_document(source: str, delete_file: bool = True) -> dict:
 
 
 def remove_all_documents(delete_files: bool = False) -> dict:
+    _ensure_document_management_enabled()
+
     delete_index()
 
     deleted_files = 0
@@ -130,3 +151,8 @@ def _safe_source(source: str) -> str:
     if source_path.is_absolute() or ".." in source_path.parts:
         raise ValueError("Invalid source path.")
     return source_path.as_posix()
+
+
+def _ensure_document_management_enabled():
+    if QUERY_ONLY_MODE:
+        raise ValueError("Document management is disabled in query-only deployment mode.")

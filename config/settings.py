@@ -29,6 +29,11 @@ RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "rag_chunks")
+QUERY_ONLY_MODE = os.getenv("QUERY_ONLY_MODE", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 # Paths
 DATA_RAW_DIR = "data/raw"

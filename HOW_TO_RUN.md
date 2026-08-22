@@ -38,10 +38,11 @@ Defaults:
 ```
 GROQ_API_KEY=your_groq_api_key_here
 LLM_MODEL=openai/gpt-oss-120b
-LLM_MAX_TOKENS=1500
+LLM_MAX_TOKENS=3000
 QDRANT_URL=https://your-qdrant-cluster-url
 QDRANT_API_KEY=your_qdrant_api_key_here
 QDRANT_COLLECTION=rag_chunks
+QUERY_ONLY_MODE=false
 ```
 
 ### 3. Install Python dependencies
@@ -77,7 +78,7 @@ Create a free Groq API key at https://console.groq.com/keys, then put it in `.en
 ```env
 GROQ_API_KEY=your_groq_api_key_here
 LLM_MODEL=openai/gpt-oss-120b
-LLM_MAX_TOKENS=1500
+LLM_MAX_TOKENS=3000
 ```
 
 ### 5. Add your Qdrant Cloud details
@@ -88,6 +89,7 @@ Create a free Qdrant Cloud cluster, then put these in `.env`:
 QDRANT_URL=https://your-qdrant-cluster-url
 QDRANT_API_KEY=your_qdrant_api_key_here
 QDRANT_COLLECTION=rag_chunks
+QUERY_ONLY_MODE=false
 ```
 
 ---
@@ -170,3 +172,13 @@ npm run api
 npm run query -- "What is this document about?"
 npm run delete-index
 ```
+
+## Query-only deployment
+
+For the first hosted version, set this on the hosting platform:
+
+```env
+QUERY_ONLY_MODE=true
+```
+
+Use this when Qdrant already has your indexed chunks and the hosted app should only answer questions. Upload/delete controls are disabled, and filters/document inventory are read from Qdrant metadata instead of `data/raw`.
