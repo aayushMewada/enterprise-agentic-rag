@@ -1,6 +1,7 @@
 const state = {
   chatHistory: [],
   documents: [],
+  mode: "agent",
   capabilities: {
     query_only: false,
     document_management: true,
@@ -28,6 +29,12 @@ const els = {
   ingestChanged: document.querySelector("#ingestChanged"),
   removeAllIndex: document.querySelector("#removeAllIndex"),
   activeFilters: document.querySelector("#activeFilters"),
+  assistantMode: document.querySelector("#assistantMode"),
+  yearFilterLabel: document.querySelector("#yearFilterLabel"),
+  companyFilterLabel: document.querySelector("#companyFilterLabel"),
+  reviewerField: document.querySelector("#reviewerField"),
+  reviewerName: document.querySelector("#reviewerName"),
+  debugToggle: document.querySelector("#debugToggle"),
 };
 
 boot();
@@ -61,6 +68,26 @@ function wireUi() {
   });
   els.yearFilter.addEventListener("change", updateActiveFilters);
   els.companyFilter.addEventListener("change", updateActiveFilters);
+  els.assistantMode.addEventListener("change", () => {
+    state.mode = els.assistantMode.value;
+    state.chatHistory = [];
+    els.messages.innerHTML = "";
+    updateModeUi();
+    updateStatus(state.mode === "agent" ? "Agent mode selected" : "RAG mode selected");
+  });
+  updateModeUi();
+}
+
+function updateModeUi() {
+  const isAgent = state.mode === "agent";
+  els.yearFilterLabel.hidden = isAgent;
+  els.companyFilterLabel.hidden = isAgent;
+  els.reviewerField.hidden = !isAgent;
+  els.debugToggle.hidden = isAgent;
+  els.question.placeholder = isAgent
+    ? "Try: Check REQ-108, explain the policy, and create a follow-up ticket."
+    : "Ask a question using only the indexed knowledge base...";
+  updateActiveFilters();
 }
 
 function setDocsVisible(visible) {
@@ -138,16 +165,24 @@ els.queryForm.addEventListener("submit", async (event) => {
   const assistant = createAssistantMessage();
 
   try {
-    const result = await streamQuery(
-      {
-        question,
-        year: els.yearFilter.value || null,
-        company: els.companyFilter.value || null,
-        chat_history: historyForRequest,
-        include_prompt: false,
-      },
-      assistant
-    );
+    const result = state.mode === "agent"
+      ? await runAgentQuery(
+          {
+            message: question,
+            chat_history: historyForRequest,
+          },
+          assistant
+        )
+      : await streamQuery(
+          {
+            question,
+            year: els.yearFilter.value || null,
+            company: els.companyFilter.value || null,
+            chat_history: historyForRequest,
+            include_prompt: false,
+          },
+          assistant
+        );
 
     state.chatHistory.push({ role: "assistant", content: result.answer });
   } catch (error) {
@@ -157,6 +192,22 @@ els.queryForm.addEventListener("submit", async (event) => {
     updateStatus("Backend connected");
   }
 });
+
+async function runAgentQuery(payload, assistant) {
+  assistant.setStatus("Agent selecting tools");
+  updateStatus("Agent selecting tools");
+  const result = await apiPost("/agent/query", payload);
+  assistant.setContent(result.answer || "The agent returned no answer.");
+  assistant.setSources(result.sources || []);
+  assistant.setTrace(result.trace || []);
+  assistant.setApprovals(result.pending_approvals || []);
+  assistant.setStatus(
+    result.stop_reason === "approval_required"
+      ? "Waiting for approval"
+      : "Agent answer"
+  );
+  return { answer: result.answer || "" };
+}
 
 els.uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -308,7 +359,19 @@ function createAssistantMessage() {
   summary.textContent = "Retrieved chunks";
   chunks.appendChild(summary);
 
-  message.append(body, citations, chunks);
+  const trace = document.createElement("details");
+  trace.className = "agent-trace";
+  trace.hidden = true;
+  const traceSummary = document.createElement("summary");
+  traceSummary.textContent = "Show agent actions";
+  const traceItems = document.createElement("div");
+  traceItems.className = "trace-items";
+  trace.append(traceSummary, traceItems);
+
+  const approvals = document.createElement("div");
+  approvals.className = "approval-list";
+
+  message.append(body, trace, approvals, citations, chunks);
   els.messages.appendChild(message);
   scrollMessages();
 
@@ -336,6 +399,20 @@ function createAssistantMessage() {
         card.className = "chunk-card";
         card.textContent = `[${chunk.source}, page ${chunk.page_start ?? "?"}] ${chunk.text}`;
         chunks.appendChild(card);
+      }
+    },
+    setTrace(items) {
+      traceItems.innerHTML = "";
+      trace.hidden = !items.length;
+      traceSummary.textContent = `Show agent actions (${items.length})`;
+      for (const item of items) {
+        traceItems.appendChild(renderTraceEvent(item));
+      }
+    },
+    setApprovals(items) {
+      approvals.innerHTML = "";
+      for (const item of items) {
+        approvals.appendChild(renderApproval(item));
       }
     },
     setError(content) {
@@ -386,6 +463,103 @@ function renderSource(source) {
 
   card.append(title, meta);
   return card;
+}
+
+function renderTraceEvent(event) {
+  const card = document.createElement("div");
+  card.className = `trace-card ${event.ok ? "success" : "failure"}`;
+
+  const heading = document.createElement("div");
+  heading.className = "trace-heading";
+  heading.textContent = `Step ${event.step}: ${event.tool}`;
+
+  const status = document.createElement("div");
+  status.className = "trace-status";
+  status.textContent = event.status || (event.ok ? "completed" : "failed");
+
+  const argumentsBlock = document.createElement("pre");
+  argumentsBlock.textContent = JSON.stringify(event.arguments || {}, null, 2);
+  card.append(heading, status, argumentsBlock);
+  return card;
+}
+
+function renderApproval(approval) {
+  const card = document.createElement("section");
+  card.className = "approval-card";
+
+  const heading = document.createElement("h3");
+  heading.className = "approval-heading";
+  heading.textContent = `Approval required: ${approval.approval_id}`;
+
+  const tool = document.createElement("p");
+  tool.textContent = `Proposed action: ${approval.tool}`;
+
+  const proposal = document.createElement("pre");
+  proposal.textContent = JSON.stringify(approval.arguments, null, 2);
+
+  const status = document.createElement("p");
+  status.className = "approval-status";
+  status.textContent = `Status: ${approval.status}`;
+
+  const actions = document.createElement("div");
+  actions.className = "approval-actions";
+
+  const approve = document.createElement("button");
+  approve.type = "button";
+  approve.textContent = "Approve action";
+  approve.addEventListener("click", () =>
+    decideApproval(approval.approval_id, "approve", card)
+  );
+
+  const reject = document.createElement("button");
+  reject.type = "button";
+  reject.className = "danger-button";
+  reject.textContent = "Reject action";
+  reject.addEventListener("click", () =>
+    decideApproval(approval.approval_id, "reject", card)
+  );
+
+  actions.append(approve, reject);
+  card.append(heading, tool, proposal, status, actions);
+  return card;
+}
+
+async function decideApproval(approvalId, decision, card) {
+  const reviewer = els.reviewerName.value.trim();
+  if (!reviewer) {
+    addErrorMessage("Enter a demo reviewer name before approving or rejecting.");
+    return;
+  }
+
+  const buttons = card.querySelectorAll("button");
+  buttons.forEach((button) => { button.disabled = true; });
+  const status = card.querySelector(".approval-status");
+  status.textContent = `${decision === "approve" ? "Approving" : "Rejecting"}...`;
+
+  try {
+    const result = await apiPost(
+      `/agent/approvals/${encodeURIComponent(approvalId)}/${decision}`,
+      { reviewer }
+    );
+    if (decision === "approve") {
+      const ticket = result.result?.data?.ticket;
+      status.textContent = ticket
+        ? `Executed: created ${ticket.ticket_id}`
+        : "Action approved and executed.";
+      card.querySelector(".approval-heading").textContent =
+        `Action executed: ${approvalId}`;
+      card.classList.add("executed");
+    } else {
+      status.textContent = "Rejected: no write occurred.";
+      card.querySelector(".approval-heading").textContent =
+        `Action rejected: ${approvalId}`;
+      card.classList.add("rejected");
+    }
+    card.querySelector(".approval-actions").hidden = true;
+  } catch (error) {
+    status.textContent = `Decision failed: ${error.message}`;
+    buttons.forEach((button) => { button.disabled = false; });
+  }
 }
 
 function renderDocuments() {
@@ -510,6 +684,10 @@ function updateStatus(message) {
 }
 
 function updateActiveFilters() {
+  if (state.mode === "agent") {
+    els.activeFilters.textContent = "Agent tools and approval controls enabled";
+    return;
+  }
   const year = els.yearFilter.value || "all years";
   const company = els.companyFilter.value || "all companies";
   els.activeFilters.textContent = `Filters: ${year}, ${company}`;

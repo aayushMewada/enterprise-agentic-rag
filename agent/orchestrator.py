@@ -89,7 +89,7 @@ def run_agent(
             return {
                 "answer": response_message.content or "The agent returned no answer.",
                 "trace": trace,
-                "sources": sources,
+                "sources": _dedupe_sources(sources),
                 "steps": step,
                 "stop_reason": "completed",
             }
@@ -137,7 +137,7 @@ def run_agent(
             return {
                 "answer": final_response,
                 "trace": trace,
-                "sources": sources,
+                "sources": _dedupe_sources(sources),
                 "pending_approvals": pending_approvals,
                 "steps": step,
                 "stop_reason": "approval_required",
@@ -147,7 +147,7 @@ def run_agent(
             return {
                 "answer": _final_response_without_tools(groq_client, messages),
                 "trace": trace,
-                "sources": sources,
+                "sources": _dedupe_sources(sources),
                 "pending_approvals": [],
                 "steps": step,
                 "stop_reason": "step_limit",
@@ -239,3 +239,15 @@ def _sources_from_tool_result(result: dict) -> list[dict]:
         }
         for item in evidence
     ]
+
+
+def _dedupe_sources(sources: list[dict]) -> list[dict]:
+    deduplicated = []
+    seen = set()
+    for source in sources:
+        key = (source.get("source"), source.get("page"))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduplicated.append(source)
+    return deduplicated
