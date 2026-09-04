@@ -1,9 +1,10 @@
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Annotated, Any, Callable, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from rag.documents import list_documents
 from retrieval.reranker import rerank_chunks
@@ -12,6 +13,8 @@ from retrieval.retriever import retrieve_chunks
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUESTS_PATH = ROOT / "data" / "operations" / "requests.json"
+TICKETS_SEED_PATH = ROOT / "data" / "operations" / "tickets_seed.json"
+RUNTIME_TICKETS_PATH = ROOT / "data" / "runtime" / "tickets.json"
 
 
 class StrictToolArguments(BaseModel):
@@ -33,6 +36,39 @@ class ListKnowledgeDocumentsArguments(StrictToolArguments):
 
 class GetRequestStatusArguments(StrictToolArguments):
     request_id: str = Field(pattern=r"^REQ-\d{3,6}$")
+
+
+PolicyCitation = Annotated[
+    str,
+    Field(
+        pattern=r"^SYN-[A-Z]{2,4}-\d{3} section \d+(?:\.\d+)?$",
+        max_length=60,
+    ),
+]
+
+
+class CreateFollowupTicketArguments(StrictToolArguments):
+    request_id: str = Field(pattern=r"^REQ-\d{3,6}$")
+    category: Literal["Documentation Follow-up"]
+    priority: Literal["Normal", "High"]
+    reason: str = Field(min_length=10, max_length=500)
+    policy_citations: list[PolicyCitation] = Field(min_length=1, max_length=5)
+
+    @model_validator(mode="after")
+    def require_followup_policy_foundations(self):
+        required = {
+            "SYN-AO-001 section 2",
+            "SYN-EX-003 section 1",
+            "SYN-SLA-004 section 1",
+            "SYN-SLA-004 section 2",
+        }
+        missing = sorted(required - set(self.policy_citations))
+        if missing:
+            raise ValueError(
+                "A documentation follow-up proposal is missing required policy "
+                f"citations: {', '.join(missing)}"
+            )
+        return self
 
 
 @dataclass(frozen=True)
@@ -136,6 +172,94 @@ def get_request_status(request_id: str) -> dict:
     }
 
 
+def create_followup_ticket(
+    request_id: str,
+    category: str,
+    priority: str,
+    reason: str,
+    policy_citations: list[str],
+    _approval: dict,
+) -> dict:
+    """Create a synthetic ticket after the executor supplies approval context."""
+
+    request_result = get_request_status(request_id)
+    if not request_result["found"]:
+        raise ValueError(f"Synthetic request {request_id} does not exist.")
+
+    request = request_result["request"]
+    if request.get("risk_flags"):
+        raise ValueError(
+            "A standard follow-up ticket cannot be created for a request with "
+            "risk flags; human compliance escalation is required."
+        )
+    if request.get("status") != "Incomplete":
+        raise ValueError(
+            "A documentation follow-up ticket can be created only for an "
+            "Incomplete request."
+        )
+
+    tickets = _load_runtime_tickets()
+    duplicate = next(
+        (
+            ticket
+            for ticket in tickets
+            if ticket.get("request_id") == request_id
+            and ticket.get("category") == category
+            and ticket.get("status") in {"Open", "In Progress"}
+        ),
+        None,
+    )
+    if duplicate:
+        raise ValueError(
+            f"Open ticket {duplicate['ticket_id']} already exists for {request_id}."
+        )
+
+    ticket = {
+        "ticket_id": _next_ticket_id(tickets),
+        "request_id": request_id,
+        "category": category,
+        "priority": priority,
+        "reason": reason,
+        "policy_citations": policy_citations,
+        "status": "Open",
+        "approval_id": _approval["approval_id"],
+        "approved_by": _approval["approved_by"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    tickets.append(ticket)
+    _write_json(RUNTIME_TICKETS_PATH, tickets)
+    return {
+        "created": True,
+        "ticket": ticket,
+        "message": f"Synthetic ticket {ticket['ticket_id']} created.",
+    }
+
+
+def _load_runtime_tickets() -> list[dict]:
+    if RUNTIME_TICKETS_PATH.exists():
+        return json.loads(RUNTIME_TICKETS_PATH.read_text(encoding="utf-8"))
+    return json.loads(TICKETS_SEED_PATH.read_text(encoding="utf-8"))
+
+
+def _next_ticket_id(tickets: list[dict]) -> str:
+    numbers = []
+    for ticket in tickets:
+        ticket_id = ticket.get("ticket_id", "")
+        if ticket_id.startswith("TKT-") and ticket_id[4:].isdigit():
+            numbers.append(int(ticket_id[4:]))
+    return f"TKT-{max(numbers, default=1000) + 1}"
+
+
+def _write_json(path: Path, data: Any):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
 TOOL_REGISTRY = {
     "search_knowledge_base": ToolSpec(
         name="search_knowledge_base",
@@ -167,6 +291,24 @@ TOOL_REGISTRY = {
         arguments_model=GetRequestStatusArguments,
         handler=get_request_status,
     ),
+    "create_followup_ticket": ToolSpec(
+        name="create_followup_ticket",
+        description=(
+            "Prepare a Documentation Follow-up ticket for an Incomplete "
+            "synthetic request with no risk flags. Supply the request ID, "
+            "priority, concise reason, and supporting policy citations. This "
+            "tool accepts only stable citations formatted like "
+            "'SYN-AO-001 section 5'; never pass temporary evidence numbers. "
+            "For this synthetic workflow include SYN-AO-001 section 2, "
+            "SYN-EX-003 section 1, SYN-SLA-004 section 1, and SYN-SLA-004 "
+            "section 2. "
+            "This is a write operation: calling it creates a frozen proposal and "
+            "requires separate explicit human approval before execution."
+        ),
+        arguments_model=CreateFollowupTicketArguments,
+        handler=create_followup_ticket,
+        requires_approval=True,
+    ),
 }
 
 
@@ -186,7 +328,11 @@ def get_tool_schemas() -> list[dict]:
     ]
 
 
-def execute_tool(name: str, arguments: dict[str, Any] | None) -> dict:
+def execute_tool(
+    name: str,
+    arguments: dict[str, Any] | None,
+    approval_context: dict | None = None,
+) -> dict:
     """Validate and execute one registered tool with a stable result envelope."""
 
     spec = TOOL_REGISTRY.get(name)
@@ -213,8 +359,22 @@ def execute_tool(name: str, arguments: dict[str, Any] | None) -> dict:
             },
         }
 
+    validated_arguments = validated.model_dump(exclude_none=True)
+    if spec.requires_approval and not approval_context:
+        return {
+            "ok": True,
+            "executed": False,
+            "status": "approval_required",
+            "tool": name,
+            "requires_approval": True,
+            "proposal": validated_arguments,
+        }
+
     try:
-        data = spec.handler(**validated.model_dump(exclude_none=True))
+        handler_arguments = dict(validated_arguments)
+        if spec.requires_approval:
+            handler_arguments["_approval"] = approval_context
+        data = spec.handler(**handler_arguments)
     except Exception as exc:
         return {
             "ok": False,
@@ -227,6 +387,8 @@ def execute_tool(name: str, arguments: dict[str, Any] | None) -> dict:
 
     return {
         "ok": True,
+        "executed": True,
+        "status": "completed",
         "tool": name,
         "requires_approval": spec.requires_approval,
         "data": data,

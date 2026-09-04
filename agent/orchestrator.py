@@ -3,6 +3,7 @@ from typing import Any
 
 from groq import Groq
 
+from agent.approvals import create_pending_approval
 from agent.tools import execute_tool, get_tool_schemas
 from config.settings import GROQ_API_KEY, LLM_MAX_TOKENS, LLM_MODEL, LLM_TEMPERATURE
 
@@ -24,7 +25,9 @@ Safety rules:
 - Use only synthetic data and never present this demonstration as real financial or compliance guidance.
 - Do not make final account-opening or compliance decisions.
 - Do not claim an action was completed unless a tool result confirms it.
-- The currently available tools are read-only. If asked to create or update something, explain that no write tool is available yet.
+- The create_followup_ticket tool creates a proposal first. It cannot write until the user separately approves the frozen proposal.
+- When proposing a ticket, convert evidence references into stable policy citations such as "SYN-AO-001 section 5". Never store temporary evidence numbers such as "1" or "[1]" in a ticket.
+- For a Documentation Follow-up proposal, include all four required foundations: SYN-AO-001 section 2 for required documents, SYN-EX-003 section 1 for the standard exception, SYN-SLA-004 section 1 for the ticket category, and SYN-SLA-004 section 2 for priority.
 - If a tool fails or evidence is missing or contradictory, state the limitation and recommend human review.
 
 Response rules:
@@ -66,6 +69,7 @@ def run_agent(
 
     trace = []
     sources = []
+    pending_approvals = []
 
     for step in range(1, max_steps + 1):
         response = groq_client.chat.completions.create(
@@ -101,9 +105,24 @@ def run_agent(
                     "tool": tool_call.function.name,
                     "arguments": parsed_arguments,
                     "ok": result.get("ok", False),
+                    "status": result.get("status"),
                     "error": result.get("error"),
                 }
             )
+            if result.get("status") == "approval_required":
+                approval = create_pending_approval(
+                    tool=result["tool"],
+                    arguments=result["proposal"],
+                )
+                pending_approvals.append(approval)
+                result = {
+                    **result,
+                    "approval": approval,
+                    "message": (
+                        "The action was not executed. Present the frozen proposal "
+                        "and approval ID to the user."
+                    ),
+                }
             sources.extend(_sources_from_tool_result(result))
             messages.append(
                 {
@@ -113,28 +132,44 @@ def run_agent(
                 }
             )
 
-        if step == max_steps:
-            final_response = groq_client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=messages,
-                tools=get_tool_schemas(),
-                tool_choice="none",
-                temperature=LLM_TEMPERATURE,
-                max_completion_tokens=LLM_MAX_TOKENS,
-                stream=False,
-            )
+        if pending_approvals:
+            final_response = _final_response_without_tools(groq_client, messages)
             return {
-                "answer": (
-                    final_response.choices[0].message.content
-                    or "The agent reached its step limit without a final answer."
-                ),
+                "answer": final_response,
                 "trace": trace,
                 "sources": sources,
+                "pending_approvals": pending_approvals,
+                "steps": step,
+                "stop_reason": "approval_required",
+            }
+
+        if step == max_steps:
+            return {
+                "answer": _final_response_without_tools(groq_client, messages),
+                "trace": trace,
+                "sources": sources,
+                "pending_approvals": [],
                 "steps": step,
                 "stop_reason": "step_limit",
             }
 
     raise RuntimeError("Agent loop ended unexpectedly.")
+
+
+def _final_response_without_tools(groq_client, messages: list[dict]) -> str:
+    response = groq_client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=messages,
+        tools=get_tool_schemas(),
+        tool_choice="none",
+        temperature=LLM_TEMPERATURE,
+        max_completion_tokens=LLM_MAX_TOKENS,
+        stream=False,
+    )
+    return (
+        response.choices[0].message.content
+        or "The agent could not produce a final response."
+    )
 
 
 def _clean_history(history: list[dict]) -> list[dict]:

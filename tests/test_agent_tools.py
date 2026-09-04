@@ -16,6 +16,7 @@ class AgentToolTests(unittest.TestCase):
                 "search_knowledge_base",
                 "list_knowledge_documents",
                 "get_request_status",
+                "create_followup_ticket",
             },
         )
 
@@ -41,6 +42,61 @@ class AgentToolTests(unittest.TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "unknown_tool")
+
+    def test_write_tool_returns_proposal_without_executing(self):
+        result = execute_tool(
+            "create_followup_ticket",
+            {
+                "request_id": "REQ-104",
+                "category": "Documentation Follow-up",
+                "priority": "Normal",
+                "reason": "Request a valid address proof document.",
+                "policy_citations": [
+                    "SYN-AO-001 section 2",
+                    "SYN-EX-003 section 1",
+                    "SYN-SLA-004 section 1",
+                    "SYN-SLA-004 section 2",
+                ],
+            },
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["executed"])
+        self.assertEqual(result["status"], "approval_required")
+
+    def test_write_tool_rejects_temporary_evidence_numbers(self):
+        result = execute_tool(
+            "create_followup_ticket",
+            {
+                "request_id": "REQ-104",
+                "category": "Documentation Follow-up",
+                "priority": "Normal",
+                "reason": "Request a valid address proof document.",
+                "policy_citations": ["1", "2"],
+            },
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "invalid_arguments")
+
+    def test_write_tool_rejects_missing_priority_policy(self):
+        result = execute_tool(
+            "create_followup_ticket",
+            {
+                "request_id": "REQ-104",
+                "category": "Documentation Follow-up",
+                "priority": "Normal",
+                "reason": "Request a valid address proof document.",
+                "policy_citations": [
+                    "SYN-AO-001 section 2",
+                    "SYN-EX-003 section 1",
+                    "SYN-SLA-004 section 1",
+                ],
+            },
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "invalid_arguments")
 
     def test_list_documents_reads_synthetic_inventory(self):
         result = execute_tool(
