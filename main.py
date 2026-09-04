@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
+import json
 import sys
 
+from agent.orchestrator import run_agent
 from ingestion.chunker import chunk_documents
 from ingestion.document_loader import discover_sources, load_documents_by_source
 from ingestion.manifest import diff_sources, load_manifest, save_manifest
@@ -65,6 +67,20 @@ def query(question: str, show_prompt: bool = False) -> str:
     return answer
 
 
+def agent_query(message: str) -> str:
+    result = run_agent(message)
+
+    _safe_print("\n--- Agent action trace ---")
+    if not result["trace"]:
+        _safe_print("No tools called.")
+    for event in result["trace"]:
+        _safe_print(json.dumps(event, ensure_ascii=False))
+
+    answer = result["answer"]
+    _safe_print(f"\nAgent answer: {answer}")
+    return answer
+
+
 def _print_debug_prompt(chunks: list[dict], prompt: list[dict]):
     print("\n--- Selected chunks ---")
     for i, chunk in enumerate(chunks, 1):
@@ -101,6 +117,11 @@ if __name__ == "__main__":
         help="Ask a question against your documents",
     )
     parser.add_argument(
+        "--agent",
+        type=str,
+        help="Run the bounded operations agent with registered tools",
+    )
+    parser.add_argument(
         "--show-prompt",
         action="store_true",
         help="Print selected chunks and prompt without calling the LLM",
@@ -109,9 +130,12 @@ if __name__ == "__main__":
 
     if args.ingest:
         ingest()
+    elif args.agent:
+        agent_query(args.agent)
     elif args.query:
         query(args.query, show_prompt=args.show_prompt)
     else:
         print("Usage:")
         print("  python main.py --ingest")
         print("  python main.py --query 'Your question here'")
+        print("  python main.py --agent 'Check request REQ-104'")
