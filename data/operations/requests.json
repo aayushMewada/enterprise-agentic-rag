@@ -1,0 +1,87 @@
+[
+  {
+    "request_id": "REQ-100",
+    "request_type": "Individual Account Opening",
+    "customer_reference": "SYN-CUST-100",
+    "status": "Complete",
+    "documents_received": [
+      "Government-issued identity document",
+      "Address proof",
+      "Signed account application form",
+      "Signed tax residency declaration"
+    ],
+    "document_issues": [],
+    "risk_flags": [],
+    "last_updated": "2026-08-28T09:30:00Z"
+  },
+  {
+    "request_id": "REQ-104",
+    "request_type": "Individual Account Opening",
+    "customer_reference": "SYN-CUST-104",
+    "status": "Incomplete",
+    "documents_received": [
+      "Government-issued identity document",
+      "Signed account application form",
+      "Signed tax residency declaration"
+    ],
+    "document_issues": [
+      "Address proof is missing"
+    ],
+    "risk_flags": [],
+    "last_updated": "2026-09-01T10:15:00Z"
+  },
+  {
+    "request_id": "REQ-105",
+    "request_type": "Individual Account Opening",
+    "customer_reference": "SYN-CUST-105",
+    "status": "Incomplete",
+    "documents_received": [
+      "Government-issued identity document",
+      "Address proof",
+      "Signed account application form",
+      "Signed tax residency declaration"
+    ],
+    "document_issues": [
+      "Identity document expired on 2026-07-31"
+    ],
+    "risk_flags": [],
+    "last_updated": "2026-09-02T11:45:00Z"
+  },
+  {
+    "request_id": "REQ-106",
+    "request_type": "Individual Account Opening",
+    "customer_reference": "SYN-CUST-106",
+    "status": "Escalation Required",
+    "documents_received": [
+      "Government-issued identity document",
+      "Address proof",
+      "Signed account application form",
+      "Signed tax residency declaration"
+    ],
+    "document_issues": [
+      "Material surname mismatch between identity document and application form"
+    ],
+    "risk_flags": [
+      "IDENTITY_MISMATCH"
+    ],
+    "last_updated": "2026-09-03T08:20:00Z"
+  },
+  {
+    "request_id": "REQ-107",
+    "request_type": "Individual Account Opening",
+    "customer_reference": "SYN-CUST-107",
+    "status": "Escalation Required",
+    "documents_received": [
+      "Government-issued identity document",
+      "Address proof",
+      "Signed account application form"
+    ],
+    "document_issues": [
+      "Tax residency declaration is missing"
+    ],
+    "risk_flags": [
+      "SUSPECTED_DOCUMENT_ALTERATION"
+    ],
+    "last_updated": "2026-09-03T14:10:00Z"
+  }
+]

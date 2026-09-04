@@ -1,0 +1,41 @@
+SYNTHETIC DEMONSTRATION POLICY - NOT REAL FINANCIAL OR COMPLIANCE GUIDANCE
+
+Account Opening Documentation Policy
+Policy ID: SYN-AO-001
+Version: 1.0
+Effective date: 2026-01-01
+
+1. Purpose
+
+This synthetic policy defines the minimum documentation required to demonstrate an individual account-opening workflow. It is intended only for testing the Enterprise Agentic RAG project and must not be applied to real customers or real financial decisions.
+
+2. Standard required documents
+
+An individual account-opening request is complete only when all of the following are present:
+
+- A government-issued identity document that is valid on the date of review.
+- Address proof issued within the previous 90 calendar days.
+- A completed and signed account application form.
+- A completed tax residency declaration.
+
+Accepted synthetic identity-document types are passport, national identity card, and driving licence. Accepted synthetic address-proof types are utility bill, bank statement, and government correspondence.
+
+3. Consistency checks
+
+The reviewer must compare the applicant name across the identity document, address proof, application form, and tax declaration. Minor formatting differences such as capitalization or an omitted middle initial may be recorded and reviewed. A materially different surname, date of birth, or identity number requires escalation.
+
+4. Document validity
+
+Expired identity documents are not acceptable. Address proof older than 90 calendar days is stale and must be replaced. An unsigned application form or unsigned tax declaration is incomplete.
+
+5. Missing documentation
+
+When a standard document is missing, the request status must remain Incomplete. The employee may prepare a follow-up ticket identifying only the missing items. Creating or sending a follow-up is a controlled action and requires human approval in the demonstration system.
+
+6. Prohibited automated decisions
+
+The agent may identify missing documents and retrieve relevant policy text. It may not approve an account, reject an applicant, make a final compliance determination, or override a human reviewer.
+
+7. Citation and audit requirements
+
+Any recommendation must cite the supporting policy section. Every status lookup, recommendation, approval decision, and write action must be recorded in the demonstration audit trail.

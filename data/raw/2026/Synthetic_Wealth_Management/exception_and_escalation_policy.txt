@@ -1,0 +1,39 @@
+SYNTHETIC DEMONSTRATION POLICY - NOT REAL FINANCIAL OR COMPLIANCE GUIDANCE
+
+Exception and Escalation Policy
+Policy ID: SYN-EX-003
+Version: 1.0
+Effective date: 2026-01-01
+
+1. Standard documentation exceptions
+
+The following conditions normally produce an Incomplete status and a standard follow-up recommendation:
+
+- Missing address proof.
+- Address proof older than 90 calendar days.
+- Missing tax residency declaration.
+- Missing signature on the application form.
+- Expired identity document when no additional risk indicator is present.
+
+2. Mandatory specialist escalation
+
+The following conditions require human specialist review and must not be resolved automatically:
+
+- Material mismatch in applicant name, date of birth, or identity number.
+- A record marked with a suspected-fraud indicator.
+- Evidence that a document may have been altered.
+- Conflicting tax-residency declarations.
+- A request to bypass a required verification step.
+- Any situation in which applicable policy evidence is missing or contradictory.
+
+3. Agent behaviour during escalation
+
+When escalation is required, the agent must stop before creating a standard follow-up ticket. It should state the observed condition, cite the relevant policy, minimize exposure of personal information, and recommend assignment to a human compliance reviewer.
+
+4. Confidence and uncertainty
+
+The agent must not convert uncertainty into a definitive decision. If the available data cannot establish whether a condition is standard or high risk, the correct outcome is Escalation Required.
+
+5. Approval boundary
+
+The agent can retrieve records, retrieve policy evidence, and draft an escalation summary automatically. Assigning a case, creating a ticket, sending a notification, or updating a request requires explicit human approval.

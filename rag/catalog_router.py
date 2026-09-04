@@ -134,7 +134,11 @@ def _is_year_catalog_query(text: str) -> bool:
 def _is_document_catalog_query(text: str) -> bool:
     return bool(
         re.search(r"\b(list|show)\s+(all\s+)?(documents|pdfs|files)\b", text)
-        or re.search(r"\b(which|what)\s+(documents|pdfs|files)\b", text)
+        or re.search(
+            r"\b(which|what)\s+(documents|pdfs|files)\s+"
+            r"(are\s+)?(available|indexed|uploaded|present|stored)\b",
+            text,
+        )
     )
 
 

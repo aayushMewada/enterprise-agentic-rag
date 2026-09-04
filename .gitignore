@@ -18,3 +18,13 @@ data/chunks/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/chunks/.gitkeep
+
+# Publish only the synthetic demonstration knowledge base.
+!data/raw/2026/
+data/raw/2026/*
+!data/raw/2026/Synthetic_Wealth_Management/
+!data/raw/2026/Synthetic_Wealth_Management/*.txt
+
+# Runtime agent state is local; deterministic seed data remains tracked.
+data/runtime/*
+!data/runtime/.gitkeep
