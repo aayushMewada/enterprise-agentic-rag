@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Interview RAG</title>
+    <title>Enterprise Agentic RAG</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
         <div>
-          <h1>Interview RAG</h1>
+          <h1>Enterprise Agentic RAG</h1>
           <p id="status">Checking backend...</p>
         </div>
         <div class="top-actions">
@@ -23,16 +23,27 @@
       <section id="chatView" class="chat-pane view active">
         <div class="filters">
           <label>
+            Mode
+            <select id="assistantMode">
+              <option value="agent" selected>Operations agent</option>
+              <option value="rag">RAG only</option>
+            </select>
+          </label>
+          <label id="yearFilterLabel">
             Year
             <select id="yearFilter">
               <option value="">All years</option>
             </select>
           </label>
-          <label>
+          <label id="companyFilterLabel">
             Company
             <select id="companyFilter">
               <option value="">All companies</option>
             </select>
+          </label>
+          <label id="reviewerField" class="reviewer-field">
+            Demo reviewer
+            <input id="reviewerName" value="browser-reviewer" maxlength="100" />
           </label>
         </div>
 
@@ -42,10 +53,10 @@
           <textarea
             id="question"
             rows="3"
-            placeholder="Ask about interview rounds, coding questions, HR themes, or preparation..."
+            placeholder="Ask about a synthetic request, policy, or approved follow-up action..."
           ></textarea>
           <div class="composer-actions">
-            <label class="debug-toggle">
+            <label id="debugToggle" class="debug-toggle">
               <input id="debugMode" type="checkbox" />
               Show chunks
             </label>

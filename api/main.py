@@ -5,8 +5,10 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from agent.approvals import approve_pending_action, reject_pending_action
+from agent.orchestrator import run_agent
 from config.settings import QUERY_ONLY_MODE
 from rag.documents import (
     ingest_changed_documents,
@@ -48,8 +50,17 @@ class QueryRequest(BaseModel):
     question: str
     year: str | None = None
     company: str | None = None
-    chat_history: list[ChatMessage] = []
+    chat_history: list[ChatMessage] = Field(default_factory=list)
     include_prompt: bool = False
+
+
+class AgentQueryRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    chat_history: list[ChatMessage] = Field(default_factory=list)
+
+
+class ApprovalDecisionRequest(BaseModel):
+    reviewer: str = Field(min_length=1, max_length=100)
 
 
 class DeleteDocumentRequest(BaseModel):
@@ -149,6 +160,41 @@ def stream_query(request: QueryRequest):
     return StreamingResponse(events(), media_type="application/x-ndjson")
 
 
+@app.post("/agent/query")
+def agent_query(request: AgentQueryRequest):
+    try:
+        return run_agent(
+            request.message,
+            chat_history=[message.model_dump() for message in request.chat_history],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/agent/approvals/{approval_id}/approve")
+def approve_agent_action(approval_id: str, request: ApprovalDecisionRequest):
+    _ensure_agent_writes_enabled()
+    try:
+        return approve_pending_action(approval_id, approved_by=request.reviewer)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/agent/approvals/{approval_id}/reject")
+def reject_agent_action(approval_id: str, request: ApprovalDecisionRequest):
+    _ensure_agent_writes_enabled()
+    try:
+        return reject_pending_action(approval_id, rejected_by=request.reviewer)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.post("/debug-query")
 def debug_query(request: QueryRequest):
     try:
@@ -212,3 +258,11 @@ def _filters_from_request(request: QueryRequest) -> dict:
 
 def _json_line(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False) + "\n"
+
+
+def _ensure_agent_writes_enabled():
+    if QUERY_ONLY_MODE:
+        raise HTTPException(
+            status_code=403,
+            detail="Agent write approvals are disabled in query-only mode.",
+        )

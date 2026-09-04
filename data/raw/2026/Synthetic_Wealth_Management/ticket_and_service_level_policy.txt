@@ -1,0 +1,43 @@
+SYNTHETIC DEMONSTRATION POLICY - NOT A REAL SERVICE-LEVEL AGREEMENT
+
+Ticket and Service-Level Policy
+Policy ID: SYN-SLA-004
+Version: 1.0
+Effective date: 2026-01-01
+
+1. Ticket categories
+
+Documentation Follow-up is used for missing, stale, expired, or unsigned standard documents.
+
+Compliance Escalation is used for material identity mismatches, suspected fraud indicators, conflicting declarations, or uncertain policy application.
+
+Technical Support is used only when the demonstration application or a synthetic integration fails.
+
+2. Priority rules
+
+Normal priority applies to a standard missing-document follow-up with no risk indicator. Its target due date is two business days after approval.
+
+High priority applies when a request is blocked close to a synthetic service deadline or when multiple documents are invalid. Its target due date is one business day after approval.
+
+Critical priority is reserved for suspected fraud or urgent compliance conditions. Critical cases must be escalated to a human specialist and must not be automatically resolved.
+
+3. Required ticket fields
+
+Every ticket must contain:
+
+- A generated ticket ID.
+- The related request ID.
+- Ticket category and priority.
+- A concise reason.
+- The missing or exceptional items, when applicable.
+- Supporting policy citations.
+- Creation timestamp and current status.
+- The identity of the approving demonstration user or an approval reference.
+
+4. Human approval
+
+The agent may draft a ticket, but it must show the proposed fields and wait for explicit approval before writing the ticket. A rejection must be recorded without creating the ticket.
+
+5. Data minimization
+
+Ticket descriptions should use request IDs rather than unnecessary applicant details. Sensitive document contents must not be copied into tickets.

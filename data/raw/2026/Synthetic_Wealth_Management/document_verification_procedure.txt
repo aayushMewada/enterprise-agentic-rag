@@ -1,0 +1,41 @@
+SYNTHETIC DEMONSTRATION PROCEDURE - NOT A REAL OPERATING PROCEDURE
+
+Document Verification Procedure
+Procedure ID: SYN-DV-002
+Version: 1.0
+Effective date: 2026-01-01
+
+1. Purpose
+
+This procedure describes the synthetic steps used to review documentation for an account-opening request.
+
+2. Verification sequence
+
+The reviewer should perform the following steps in order:
+
+1. Retrieve the request by its request ID.
+2. Confirm that the request type is Individual Account Opening.
+3. Compare the received-document list with the required-document checklist.
+4. Check expiry dates for identity documents.
+5. Check that address proof was issued within the previous 90 calendar days.
+6. Confirm that the application form and tax declaration are signed.
+7. Compare the applicant name, date of birth, and identity number across documents.
+8. Record missing, expired, stale, unsigned, or inconsistent items.
+9. Apply the exception and escalation policy.
+10. Prepare a recommendation for human review.
+
+3. Outcome categories
+
+Complete means every required document is present and no unresolved inconsistency has been detected.
+
+Incomplete means one or more standard documents are missing, stale, expired, or unsigned, but no high-risk inconsistency has been identified.
+
+Escalation Required means the record contains a material identity mismatch, a suspected fraud indicator, an unsupported document type, or another condition requiring specialist review.
+
+4. Follow-up preparation
+
+For an Incomplete request, a follow-up ticket should contain the request ID, missing-document list, relevant policy citation, proposed priority, and due date. The ticket must not contain unnecessary personal data.
+
+5. Human responsibility
+
+The agent may calculate completeness from synthetic records and propose the next step. A human remains responsible for approving write actions and making final decisions.
